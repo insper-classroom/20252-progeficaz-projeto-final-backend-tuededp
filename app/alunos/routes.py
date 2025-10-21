@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required
 from pymongo.errors import DuplicateKeyError
 from ..extensions import mongo
 from ..utils import oid, now, scrub, hash_password
@@ -39,6 +40,7 @@ def create():
     return jsonify(scrub(doc)), 201
 
 @bp.get("/")
+@jwt_required()
 def list_():
     q = request.args.get("q")
     cidade = request.args.get("cidade")
@@ -64,6 +66,7 @@ def list_():
     return jsonify({"data":[scrub(d) for d in cur], "total":total, "page":page, "limit":limit})
 
 @bp.get("/<id>")
+@jwt_required()
 def get_(id):
     _id = oid(id)
     if not _id: return jsonify({"error":"invalid_id"}), 400
@@ -72,6 +75,7 @@ def get_(id):
     return jsonify(scrub(doc))
 
 @bp.put("/<id>")
+@jwt_required()
 def update(id):
     _id = oid(id)
     if not _id: return jsonify({"error":"invalid_id"}), 400
@@ -96,6 +100,7 @@ def update(id):
     return jsonify(scrub(doc))
 
 @bp.delete("/<id>")
+@jwt_required()
 def delete(id):
     _id = oid(id)
     if not _id: return jsonify({"error":"invalid_id"}), 400
