@@ -1,8 +1,10 @@
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager
 from datetime import timezone
 from pymongo import MongoClient
 
 cors = CORS()
+jwt = JWTManager()
 
 class Mongo:
     client = None
