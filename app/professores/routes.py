@@ -42,7 +42,6 @@ def create():
     return jsonify(scrub(doc)), 201
 
 @bp.get("/")
-@jwt_required()
 def list_():
     q = request.args.get("q")
     cidade = request.args.get("cidade")
@@ -69,7 +68,6 @@ def list_():
     return jsonify({"data":[scrub(d) for d in cur], "total":total, "page":page, "limit":limit})
 
 @bp.get("/<id>")
-@jwt_required()
 def get_(id):
     _id = oid(id)
     if not _id: return jsonify({"error":"invalid_id"}), 400
