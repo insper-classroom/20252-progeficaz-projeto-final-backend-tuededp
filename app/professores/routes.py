@@ -105,3 +105,4 @@ def delete(id):
     if not _id: return jsonify({"error":"invalid_id"}), 400
     r = mongo.db.professores.delete_one({"_id": _id})
     return ("",204) if r.deleted_count else (jsonify({"error":"not_found"}),404)
+
