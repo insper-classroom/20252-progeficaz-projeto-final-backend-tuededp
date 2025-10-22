@@ -20,6 +20,12 @@ def create_app():
     app.config["CORS_ORIGINS"]= os.getenv("CORS_ORIGINS", "*").split(",")
     app.config["JSON_SORT_KEYS"] = False
     app.config["SHOW_HASH"] = os.getenv("SHOW_HASH", "false").lower() == "true"
+   
+    # Habilita mock de DB automaticamente em testes ou via env
+    app.config["USE_MOCK_DB"] = (
+        os.getenv("USE_MOCK_DB", "").lower() in {"1", "true", "yes"}
+        or "PYTEST_CURRENT_TEST" in os.environ
+    )
     
     # JWT Configuration
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "sua-chave-secreta-super-segura")
