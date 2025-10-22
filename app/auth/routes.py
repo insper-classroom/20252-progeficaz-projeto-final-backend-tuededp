@@ -53,7 +53,7 @@ def login():
                     "nome": aluno['nome'],
                     "tipo": "aluno"
                 }
-                token = create_access_token(identity=token_data)
+                token = create_access_token(identity=str(aluno['_id']), additional_claims=token_data)
                 return jsonify({
                     "access_token": token,
                     "user": scrub(aluno),
@@ -72,7 +72,7 @@ def login():
                     "nome": professor['nome'],
                     "tipo": "professor"
                 }
-                token = create_access_token(identity=token_data)
+                token = create_access_token(identity=str(professor['_id']), additional_claims=token_data)
                 return jsonify({
                     "access_token": token,
                     "user": scrub(professor),
@@ -90,13 +90,16 @@ def login():
 def verificar():
     """Endpoint para verificar se o token é válido"""
     try:
-        user_data = get_jwt_identity()
+        from flask_jwt_extended import get_jwt
+        user_id = get_jwt_identity()
+        claims = get_jwt()
+        
         return jsonify({
             "msg": "Token válido",
-            "user_id": user_data.get('user_id'),
-            "email": user_data.get('email'),
-            "nome": user_data.get('nome'),
-            "tipo": user_data.get('tipo')
+            "user_id": user_id,
+            "email": claims.get('email'),
+            "nome": claims.get('nome'),
+            "tipo": claims.get('tipo')
         }), 200
     except Exception as e:
         return jsonify({"msg": f"Erro na verificação: {str(e)}"}), 500

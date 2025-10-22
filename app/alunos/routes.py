@@ -40,7 +40,6 @@ def create():
     return jsonify(scrub(doc)), 201
 
 @bp.get("/")
-@jwt_required()
 def list_():
     q = request.args.get("q")
     cidade = request.args.get("cidade")
