@@ -21,15 +21,15 @@ def auth_header():
 
 @patch('app.professores.routes.mongo')
 def test_get_professores(mock_mongo, client, auth_header):
+    professores = [
+        {"_id": ObjectId(), "nome": "João", "email": "joao@example.com"},
+        {"_id": ObjectId(), "nome": "Maria", "email": "maria@example.com"},
+    ]
     cursor = MagicMock()
     cursor.sort.return_value = cursor
     cursor.skip.return_value = cursor
     cursor.limit.return_value = professores
     
-    professores = [
-        {"_id": ObjectId(), "nome": "João", "email": "joao@example.com"},
-        {"_id": ObjectId(), "nome": "Maria", "email": "maria@example.com"},
-    ]
     
     mock_mongo.db.professores.find.return_value = cursor
     mock_mongo.db.professores.count_documents.return_value = len(professores)
