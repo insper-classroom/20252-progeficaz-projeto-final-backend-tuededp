@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from app.extensions import mongo
 from app.utils import scrub
 import bcrypt
@@ -36,7 +36,7 @@ def login():
     try:
         data = request.get_json()
         email = data.get('email')
-        password = data.get('password')
+        password = data.get('senha')
         
         if not email or not password:
             return jsonify({"msg": "Email e senha são obrigatórios"}), 400
@@ -47,13 +47,14 @@ def login():
             # Verificar senha do aluno
             if bcrypt.checkpw(password.encode('utf-8'), aluno['senha_hash'].encode('utf-8')):
                 # Criar token JWT com informações do aluno
-                token_data = {
-                    "user_id": str(aluno['_id']),
-                    "email": aluno['email'],
-                    "nome": aluno['nome'],
-                    "tipo": "aluno"
-                }
-                token = create_access_token(identity=token_data)
+                token = create_access_token(
+                    identity=str(aluno['_id']),
+                    additional_claims={
+                        "email": aluno['email'],
+                        "nome": aluno['nome'],
+                        "tipo": "aluno"
+                    }
+                )
                 return jsonify({
                     "access_token": token,
                     "user": scrub(aluno),
@@ -66,13 +67,14 @@ def login():
             # Verificar senha do professor
             if bcrypt.checkpw(password.encode('utf-8'), professor['senha_hash'].encode('utf-8')):
                 # Criar token JWT com informações do professor
-                token_data = {
-                    "user_id": str(professor['_id']),
-                    "email": professor['email'],
-                    "nome": professor['nome'],
-                    "tipo": "professor"
-                }
-                token = create_access_token(identity=token_data)
+                token = create_access_token(
+                    identity=str(professor['_id']),
+                    additional_claims={
+                        "email": professor['email'],
+                        "nome": professor['nome'],
+                        "tipo": "professor"
+                    }
+                )
                 return jsonify({
                     "access_token": token,
                     "user": scrub(professor),
@@ -90,13 +92,14 @@ def login():
 def verificar():
     """Endpoint para verificar se o token é válido"""
     try:
-        user_data = get_jwt_identity()
+        user_id = get_jwt_identity()
+        claims = get_jwt()
         return jsonify({
             "msg": "Token válido",
-            "user_id": user_data.get('user_id'),
-            "email": user_data.get('email'),
-            "nome": user_data.get('nome'),
-            "tipo": user_data.get('tipo')
+            "user_id": user_id,
+            "email": claims.get('email'),
+            "nome": claims.get('nome'),
+            "tipo": claims.get('tipo')
         }), 200
     except Exception as e:
         return jsonify({"msg": f"Erro na verificação: {str(e)}"}), 500
