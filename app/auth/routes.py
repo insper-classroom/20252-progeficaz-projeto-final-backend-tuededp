@@ -37,8 +37,9 @@ def login():
     """Endpoint para login de alunos e professores"""
     try:
         data = request.get_json()
+        print(data)
         email = data.get('email')
-        password = data.get('senha')
+        password = data.get('password')
         
         if not email or not password:
             return jsonify({"msg": "Email e senha são obrigatórios"}), 400
