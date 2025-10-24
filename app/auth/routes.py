@@ -3,6 +3,8 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from app.extensions import mongo
 from app.utils import scrub
 import bcrypt
+import requests
+from flask import current_app
 
 bp = Blueprint('auth', __name__)
 
@@ -100,6 +102,35 @@ def verificar():
             "email": claims.get('email'),
             "nome": claims.get('nome'),
             "tipo": claims.get('tipo')
-        }), 200
+            "user_id": user_id,
+            "email": claims.get('email'),
+            "nome": claims.get('nome'),
+            "tipo": claims.get('tipo')
+            }), 200
     except Exception as e:
         return jsonify({"msg": f"Erro na verificação: {str(e)}"}), 500
+
+@bp.route('/checa_cep/<cep>', methods=['GET'])
+def checa_cep(cep):
+    """ 
+    Essa função serve para checar se o CEP é valido, retornando os erros caso nao seja
+    """
+        
+    digitos_cep = ''.join(num for num in cep if num.isdigit())
+    if len(digitos_cep) != 8:
+        return jsonify({"error": "CEP inválido", "msg": "CEP deve conter 8 dígitos"}), 400
+
+    try:
+        resp = requests.get(f'https://viacep.com.br/ws/{digitos_cep}/json/', timeout=5)
+    except requests.RequestException as e:
+        current_app.logger.exception("Erro ao consultar ViaCEP")
+        return jsonify({"error": "failed_lookup", "msg": "Erro ao consultar serviço de CEP"}), 502
+
+    if resp.status_code != 200:
+        return jsonify({"error": "via_cep_error", "msg": "ViaCEP retornou erro"}), 502
+
+    data = resp.json()
+    if data.get("erro"):
+        return jsonify({"error": "not_found", "msg": "CEP não encontrado"}), 404
+
+    return jsonify(data), 200
