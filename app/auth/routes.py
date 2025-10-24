@@ -102,11 +102,7 @@ def verificar():
             "email": claims.get('email'),
             "nome": claims.get('nome'),
             "tipo": claims.get('tipo')
-            "user_id": user_id,
-            "email": claims.get('email'),
-            "nome": claims.get('nome'),
-            "tipo": claims.get('tipo')
-            }), 200
+        }), 200
     except Exception as e:
         return jsonify({"msg": f"Erro na verificação: {str(e)}"}), 500
 
