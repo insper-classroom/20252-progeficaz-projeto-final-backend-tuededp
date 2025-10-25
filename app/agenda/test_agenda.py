@@ -1,4 +1,3 @@
-
 import pytest
 from unittest.mock import patch, MagicMock
 from bson import ObjectId
@@ -44,7 +43,7 @@ def test_create_success(mock_mongo, client):
         "data_hora": datetime(2025, 12, 1, 10, 0, tzinfo=timezone.utc),
         "status": "agendada"
     }
-    # Conflitos: duas primeiras chamadas (prof/aluno) retornam None, terceira (busca final) retorna final_doc
+    # Conflitos: duas primeiras chamadas retornam None e a última retorna a aula agendada
     mock_mongo.db.agenda.find_one.side_effect = [None, None, final_doc]
     
     # Cria o Json
