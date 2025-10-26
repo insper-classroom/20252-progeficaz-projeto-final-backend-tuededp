@@ -8,7 +8,7 @@ from .aulas.routes import bp as aulas_bp
 from .categorias.routes import bp as categorias_bp
 from .agenda.routes import bp as agenda_bp
 from .chats.routes import bp as chats_bp
-# from .avaliacoes.routes import bp as avaliacoes_bp
+from .avaliacoes.routes import bp as avaliacoes_bp
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -96,7 +96,7 @@ def create_app():
     app.register_blueprint(aulas_bp,       url_prefix="/api/aulas")
     app.register_blueprint(categorias_bp,  url_prefix="/api/categorias")
     app.register_blueprint(agenda_bp,      url_prefix="/api/agenda")
-    # app.register_blueprint(avaliacoes_bp,  url_prefix="/api/avaliacoes")
+    app.register_blueprint(avaliacoes_bp,  url_prefix="/api/avaliacoes")
     app.register_blueprint(chats_bp, url_prefix="/api/chats")
 
     return app
