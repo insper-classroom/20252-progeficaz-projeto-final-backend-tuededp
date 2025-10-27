@@ -1,125 +1,101 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+# app/auth/routes.py
+from flask import Blueprint, request, jsonify, current_app
+from flask_cors import cross_origin
+from flask_jwt_extended import (
+    create_access_token, jwt_required, get_jwt_identity, get_jwt
+)
 from app.extensions import mongo
 from app.utils import scrub
 import bcrypt
 import requests
-from flask import current_app
 
-bp = Blueprint('auth', __name__)
+bp = Blueprint("auth", __name__)
 
-@bp.route('/test', methods=['GET'])
+@bp.route("/test", methods=["GET"])
 def test():
-    """Endpoint de teste"""
     return jsonify({"msg": "Sistema funcionando"}), 200
 
-@bp.route('/test-db', methods=['GET'])
+@bp.route("/test-db", methods=["GET"])
 def test_db():
-    """Endpoint para testar acesso ao banco"""
     try:
-        # Contar alunos
         alunos_count = mongo.db.alunos.count_documents({})
-        
-        # Buscar um aluno de exemplo
         aluno_exemplo = mongo.db.alunos.find_one({})
-        
         return jsonify({
             "msg": "Conexão com banco OK",
             "alunos_count": alunos_count,
             "aluno_exemplo": scrub(aluno_exemplo) if aluno_exemplo else None
         }), 200
-        
     except Exception as e:
         return jsonify({"msg": f"Erro no banco: {str(e)}"}), 500
 
-@bp.route('/login', methods=['POST'])
+# ---- PRE-FLIGHT (CORS) ----
+@bp.route("/login", methods=["OPTIONS"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def login_preflight():
+    return ("", 204)
+
+# ---- LOGIN (POST /api/auth/login e /api/auth/login/) ----
+@bp.route("/login", methods=["POST"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
 def login():
-    """Endpoint para login de alunos e professores"""
     try:
-        data = request.get_json()
-        print(data)
-        email = data.get('email')
-        password = data.get('password')
-        
+        data = request.get_json() or {}
+        email = (data.get("email") or "").strip().lower()
+        password = (data.get("password") or "")
+
         if not email or not password:
             return jsonify({"msg": "Email e senha são obrigatórios"}), 400
-        
-        # Buscar em alunos primeiro
-        aluno = mongo.db.alunos.find_one({"email": email.strip().lower()})
-        if aluno:
-            # Verificar senha do aluno
-            if bcrypt.checkpw(password.encode('utf-8'), aluno['senha_hash'].encode('utf-8')):
-                # Criar token JWT com informações do aluno
-                token = create_access_token(
-                    identity=str(aluno['_id']),
-                    additional_claims={
-                        "email": aluno['email'],
-                        "nome": aluno['nome'],
-                        "tipo": "aluno"
-                    }
-                )
-                return jsonify({
-                    "access_token": token,
-                    "user": scrub(aluno),
-                    "tipo": "aluno"
-                }), 200
-        
-        # Buscar em professores se não encontrou em alunos
-        professor = mongo.db.professores.find_one({"email": email.strip().lower()})
-        if professor:
-            # Verificar senha do professor
-            if bcrypt.checkpw(password.encode('utf-8'), professor['senha_hash'].encode('utf-8')):
-                # Criar token JWT com informações do professor
-                token = create_access_token(
-                    identity=str(professor['_id']),
-                    additional_claims={
-                        "email": professor['email'],
-                        "nome": professor['nome'],
-                        "tipo": "professor"
-                    }
-                )
-                return jsonify({
-                    "access_token": token,
-                    "user": scrub(professor),
-                    "tipo": "professor"
-                }), 200
-        
-        # Se chegou aqui, credenciais inválidas
+
+        # Tenta aluno
+        aluno = mongo.db.alunos.find_one({"email": email})
+        if aluno and bcrypt.checkpw(password.encode("utf-8"), aluno["senha_hash"].encode("utf-8")):
+            token = create_access_token(
+                identity=str(aluno["_id"]),
+                additional_claims={"email": aluno["email"], "nome": aluno["nome"], "tipo": "aluno"},
+            )
+            return jsonify({"access_token": token, "user": scrub(aluno), "tipo": "aluno"}), 200
+
+        # Tenta professor
+        professor = mongo.db.professores.find_one({"email": email})
+        if professor and bcrypt.checkpw(password.encode("utf-8"), professor["senha_hash"].encode("utf-8")):
+            token = create_access_token(
+                identity=str(professor["_id"]),
+                additional_claims={"email": professor["email"], "nome": professor["nome"], "tipo": "professor"},
+            )
+            return jsonify({"access_token": token, "user": scrub(professor), "tipo": "professor"}), 200
+
         return jsonify({"msg": "Email ou senha inválidos"}), 401
-        
     except Exception as e:
         return jsonify({"msg": f"Erro no login: {str(e)}"}), 500
 
-@bp.route('/verificar', methods=['GET'])
+# ---- VERIFICAR TOKEN ----
+@bp.route("/verificar", methods=["GET"])
+@cross_origin(headers=["Content-Type", "Authorization"])
 @jwt_required()
 def verificar():
-    """Endpoint para verificar se o token é válido"""
     try:
         user_id = get_jwt_identity()
         claims = get_jwt()
         return jsonify({
             "msg": "Token válido",
             "user_id": user_id,
-            "email": claims.get('email'),
-            "nome": claims.get('nome'),
-            "tipo": claims.get('tipo')
+            "email": claims.get("email"),
+            "nome": claims.get("nome"),
+            "tipo": claims.get("tipo"),
         }), 200
     except Exception as e:
         return jsonify({"msg": f"Erro na verificação: {str(e)}"}), 500
 
-@bp.route('/checa_cep/<cep>', methods=['GET'])
+# ---- CEP (extra) ----
+@bp.route("/checa_cep/<cep>", methods=["GET"])
 def checa_cep(cep):
-    """ 
-    Essa função serve para checar se o CEP é valido, retornando os erros caso nao seja
-    """
-        
-    digitos_cep = ''.join(num for num in cep if num.isdigit())
+    digitos_cep = "".join(num for num in cep if num.isdigit())
     if len(digitos_cep) != 8:
         return jsonify({"error": "CEP inválido", "msg": "CEP deve conter 8 dígitos"}), 400
 
     try:
-        resp = requests.get(f'https://viacep.com.br/ws/{digitos_cep}/json/', timeout=5)
-    except requests.RequestException as e:
+        resp = requests.get(f"https://viacep.com.br/ws/{digitos_cep}/json/", timeout=5)
+    except requests.RequestException:
         current_app.logger.exception("Erro ao consultar ViaCEP")
         return jsonify({"error": "failed_lookup", "msg": "Erro ao consultar serviço de CEP"}), 502
 
