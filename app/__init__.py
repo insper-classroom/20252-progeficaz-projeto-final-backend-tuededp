@@ -7,6 +7,7 @@ from .auth.routes import bp as auth_bp
 from .aulas.routes import bp as aulas_bp
 from .categorias.routes import bp as categorias_bp
 from .agenda.routes import bp as agenda_bp
+from .chats.routes import bp as chats_bp
 from .avaliacoes.routes import bp as avaliacoes_bp
 from dotenv import load_dotenv
 
@@ -20,7 +21,7 @@ def create_app():
     app.config["CORS_ORIGINS"]= os.getenv("CORS_ORIGINS", "*").split(",")
     app.config["JSON_SORT_KEYS"] = False
     app.config["SHOW_HASH"] = os.getenv("SHOW_HASH", "false").lower() == "true"
-   
+    app.config["JWT_TOKEN_LOCATION"] = ["headers"]  # usa header
     # Habilita mock de DB automaticamente em testes ou via env
     app.config["USE_MOCK_DB"] = (
         os.getenv("USE_MOCK_DB", "").lower() in {"1", "true", "yes"}
@@ -28,10 +29,23 @@ def create_app():
     )
     
     # JWT Configuration
+    app.config["JWT_HEADER_NAME"]   = "Authorization"
+    app.config["JWT_HEADER_TYPE"]   = "Bearer"
     app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "sua-chave-secreta-super-segura")
     app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Tokens não expiram por padrão
 
-    cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
+    cors.init_app(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": app.config["CORS_ORIGINS"],
+            "allow_headers": ["Content-Type", "Authorization"],   # <- libera Authorization
+            "expose_headers": ["Authorization"],
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        }
+    },
+    supports_credentials=False,  # true só se você for usar cookies
+)
     mongo.init_app(app)
     jwt.init_app(app)
 
@@ -83,5 +97,6 @@ def create_app():
     app.register_blueprint(categorias_bp,  url_prefix="/api/categorias")
     app.register_blueprint(agenda_bp,      url_prefix="/api/agenda")
     app.register_blueprint(avaliacoes_bp,  url_prefix="/api/avaliacoes")
+    app.register_blueprint(chats_bp, url_prefix="/api/chats")
 
     return app
