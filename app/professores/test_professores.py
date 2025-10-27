@@ -20,7 +20,24 @@ def auth_header():
     return {"Authorization": f"Bearer {token}"}
 
 @patch('app.professores.routes.mongo')
-def test_get_professores(mock_mongo, client, auth_header):
+def test_create_success(mock_mongo, client):
+    oid = ObjectId()
+    mock_mongo.db.professores.insert_one.return_value = MagicMock(inserted_id=oid)
+    mock_mongo.db.professores.find_one.return_value = {"_id": oid, "nome": "Ana", "email": "ana@example.com"}
+
+    professor = {"nome": "Ana", "email": "ana@example.com", "senha": "123"}
+    response = client.post("/api/professores/", json=professor)
+    assert response.status_code == 201
+    data = response.get_json()
+    
+    assert data["nome"] == "Ana"
+    assert data["email"] == "ana@example.com"
+    assert "_id" in data
+    assert isinstance(data["_id"], str)
+    assert "senha" not in data
+
+@patch('app.professores.routes.mongo')
+def test_list_success(mock_mongo, client, auth_header):
     professores = [
         {"_id": ObjectId(), "nome": "João", "email": "joao@example.com"},
         {"_id": ObjectId(), "nome": "Maria", "email": "maria@example.com"},
@@ -43,7 +60,7 @@ def test_get_professores(mock_mongo, client, auth_header):
     assert body["data"][1]["nome"] == "Maria"
 
 @patch('app.professores.routes.mongo')
-def test_get_id(mock_mongo, client, auth_header):
+def test_get_by_id_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.professores.find_one.return_value = {
         "_id": oid, "nome": "João", "email": "joao@example.com"
@@ -70,24 +87,7 @@ def test_get_professor_nao_encontrado_404(mock_mongo, client, auth_header):
     assert response.status_code == 404
 
 @patch('app.professores.routes.mongo')
-def test_novo_professor(mock_mongo, client):
-    oid = ObjectId()
-    mock_mongo.db.professores.insert_one.return_value = MagicMock(inserted_id=oid)
-    mock_mongo.db.professores.find_one.return_value = {"_id": oid, "nome": "Ana", "email": "ana@example.com"}
-
-    professor = {"nome": "Ana", "email": "ana@example.com", "senha": "123"}
-    response = client.post("/api/professores/", json=professor)
-    assert response.status_code == 201
-    data = response.get_json()
-    
-    assert data["nome"] == "Ana"
-    assert data["email"] == "ana@example.com"
-    assert "_id" in data
-    assert isinstance(data["_id"], str)
-    assert "senha" not in data
-
-@patch('app.professores.routes.mongo')
-def test_att_professor(mock_mongo, client, auth_header):
+def test_update_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.professores.update_one.return_value = MagicMock(matched_count=1)
     mock_mongo.db.professores.find_one.return_value = {
@@ -99,7 +99,7 @@ def test_att_professor(mock_mongo, client, auth_header):
     assert response.get_json()["nome"] == "Nome Atualizado"
 
 @patch('app.professores.routes.mongo')
-def test_remove_professor(mock_mongo, client, auth_header):
+def test_delete_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.professores.delete_one.return_value = MagicMock(deleted_count=1)
 

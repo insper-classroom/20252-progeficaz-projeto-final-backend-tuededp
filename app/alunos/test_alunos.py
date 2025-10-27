@@ -20,7 +20,24 @@ def auth_header():
     return {"Authorization": f"Bearer {token}"}
 
 @patch('app.alunos.routes.mongo')
-def test_get_alunos(mock_mongo, client, auth_header):
+def test_create_success(mock_mongo, client):
+    oid = ObjectId()
+    mock_mongo.db.alunos.insert_one.return_value = MagicMock(inserted_id=oid)
+    mock_mongo.db.alunos.find_one.return_value = {"_id": oid, "nome": "Ana", "email": "ana@example.com"}
+
+    aluno = {"nome": "Ana", "email": "ana@example.com", "senha": "123"}
+    response = client.post("/api/alunos/", json=aluno)
+    assert response.status_code == 201
+    data = response.get_json()
+    
+    assert data["nome"] == "Ana"
+    assert data["email"] == "ana@example.com"
+    assert "_id" in data
+    assert isinstance(data["_id"], str)
+    assert "senha" not in data
+
+@patch('app.alunos.routes.mongo')
+def test_list_success(mock_mongo, client, auth_header):
     alunos = [
         {"_id": ObjectId(), "nome": "Felipe", "email": "felipe@example.com"},
         {"_id": ObjectId(), "nome": "Alberto", "email": "albertin@example.com"},
@@ -43,7 +60,7 @@ def test_get_alunos(mock_mongo, client, auth_header):
     assert body["data"][1]["nome"] == "Alberto"
 
 @patch('app.alunos.routes.mongo')
-def test_get_id(mock_mongo, client, auth_header):
+def test_get_by_id_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.alunos.find_one.return_value = {"_id": oid, "nome": "Pedro", "email": "pedro@example.com"}
 
@@ -68,24 +85,7 @@ def test_get_aluno_nao_encontrado_404(mock_mongo, client, auth_header):
     assert response.status_code == 404
 
 @patch('app.alunos.routes.mongo')
-def test_novo_aluno(mock_mongo, client):
-    oid = ObjectId()
-    mock_mongo.db.alunos.insert_one.return_value = MagicMock(inserted_id=oid)
-    mock_mongo.db.alunos.find_one.return_value = {"_id": oid, "nome": "Ana", "email": "ana@example.com"}
-
-    aluno = {"nome": "Ana", "email": "ana@example.com", "senha": "123"}
-    response = client.post("/api/alunos/", json=aluno)
-    assert response.status_code == 201
-    data = response.get_json()
-    
-    assert data["nome"] == "Ana"
-    assert data["email"] == "ana@example.com"
-    assert "_id" in data
-    assert isinstance(data["_id"], str)
-    assert "senha" not in data
-
-@patch('app.alunos.routes.mongo')
-def test_att_aluno(mock_mongo, client, auth_header):
+def test_update_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.alunos.update_one.return_value = MagicMock(matched_count=1)
     mock_mongo.db.alunos.find_one.return_value = {
@@ -97,7 +97,7 @@ def test_att_aluno(mock_mongo, client, auth_header):
     assert response.get_json()["nome"] == "Nome Atualizado"
 
 @patch('app.alunos.routes.mongo')
-def test_remove_aluno(mock_mongo, client, auth_header):
+def test_delete_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.alunos.delete_one.return_value = MagicMock(deleted_count=1)
 
