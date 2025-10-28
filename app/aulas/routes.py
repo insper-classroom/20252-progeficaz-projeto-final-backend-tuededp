@@ -2,6 +2,11 @@ from flask import Blueprint, request, jsonify
 from pymongo.errors import DuplicateKeyError
 from ..extensions import mongo
 from ..utils import oid, now, scrub
+from flask import current_app
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from werkzeug.utils import secure_filename
+import os, time
+
 
 bp = Blueprint("aulas", __name__)
 
