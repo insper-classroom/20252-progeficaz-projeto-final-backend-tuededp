@@ -16,6 +16,7 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__)
+    
     # Config básica via env
     app.config["MONGODB_URI"] = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
     app.config["MONGO_DB"]    = os.getenv("MONGO_DB", "app_dev")
@@ -40,18 +41,22 @@ def create_app():
     def uploads(filename):
         return send_from_directory(app.config["UPLOAD_ROOT"], filename, conditional=True)
 
-    # CORS (libera Authorization)
+    # CORS - Configuração global para todas as rotas /api/*
+    # IMPORTANTE: Deve ser configurado ANTES dos blueprints serem registrados
     cors.init_app(
         app,
         resources={
             r"/api/*": {
-                "origins": app.config["CORS_ORIGINS"],
+                "origins": "*",
+                "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
                 "allow_headers": ["Content-Type", "Authorization"],
                 "expose_headers": ["Authorization"],
-                "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+                "supports_credentials": False,
+                "max_age": 3600,
             }
         },
         supports_credentials=False,
+        automatic_options=True,
     )
 
     mongo.init_app(app)

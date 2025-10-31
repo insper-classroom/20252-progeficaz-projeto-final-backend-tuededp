@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 from pymongo.errors import DuplicateKeyError
 from ..extensions import mongo
 from ..utils import oid, now, scrub
@@ -14,7 +15,14 @@ AULA_FIELDS = {
     "titulo", "descricao_aula", "preco_decimal", "id_categoria", "id_professor"
 }
 
-@bp.post("/")
+# Handler OPTIONS explícito para evitar redirects no preflight
+@bp.route("/", methods=["OPTIONS"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def options_handler():
+    return ("", 204)
+
+@bp.route("/", methods=["POST"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
 def create():
     data = request.get_json(force=True) or {}
     body = {k: v for k, v in data.items() if k in AULA_FIELDS}
@@ -31,6 +39,10 @@ def create():
     if not professor:
         return jsonify({"error": "professor_not_found"}), 404
     
+    # IMPORTANTE: Salvar id_professor como ObjectId, não como string
+    body["id_professor"] = prof_id
+    print(f"[AULAS CREATE] ID do professor salvo: {prof_id} (tipo: {type(prof_id)})")
+    
     # Validar se a categoria existe (se fornecida)
     if body.get("id_categoria"):
         cat_id = oid(body.get("id_categoria"))
@@ -40,6 +52,12 @@ def create():
         categoria = mongo.db.categorias.find_one({"_id": cat_id})
         if not categoria:
             return jsonify({"error": "category_not_found"}), 404
+        
+        # IMPORTANTE: Salvar id_categoria como ObjectId
+        body["id_categoria"] = cat_id
+    else:
+        # Se não forneceu categoria, remover do body
+        body.pop("id_categoria", None)
     
     # Converter preço para decimal
     if body.get("preco_decimal"):
@@ -47,19 +65,46 @@ def create():
             body["preco_decimal"] = float(body["preco_decimal"])
         except (ValueError, TypeError):
             return jsonify({"error": "invalid_price_format"}), 400
+    else:
+        # Se não forneceu preço, remover do body
+        body.pop("preco_decimal", None)
     
     body["created_at"] = body["updated_at"] = now()
     body["status"] = "disponivel"  # Status padrão
     
+    print(f"[AULAS CREATE] Criando aula - Título: {body.get('titulo')}, Status: {body.get('status')}, Professor ID: {prof_id}")
+    
     try:
         res = mongo.db.aulas.insert_one(body)
+        print(f"[AULAS CREATE] Aula inserida com ID: {res.inserted_id}")
     except Exception as e:
+        print(f"[AULAS CREATE] ERRO ao inserir aula: {str(e)}")
         return jsonify({"error": "creation_failed", "details": str(e)}), 500
     
     doc = mongo.db.aulas.find_one({"_id": res.inserted_id}, {})
-    return jsonify(scrub(doc)), 201
+    print(f"[AULAS CREATE] Aula recuperada do banco - Status: {doc.get('status') if doc else 'não encontrada'}")
+    
+    # Criar cópia para não modificar o documento original
+    doc_copy = dict(doc)
+    aula_doc = scrub(doc_copy)
+    
+    # GARANTIR que o status está presente
+    if "status" not in aula_doc:
+        aula_doc["status"] = doc.get("status", "disponivel")
+        print(f"[AULAS CREATE] ⚠️ Status não estava após scrub, adicionado: '{aula_doc['status']}'")
+    
+    # Converter ObjectIds para string (id_professor, id_categoria)
+    if aula_doc.get("id_professor"):
+        aula_doc["id_professor"] = str(aula_doc["id_professor"])
+    if aula_doc.get("id_categoria"):
+        aula_doc["id_categoria"] = str(aula_doc["id_categoria"])
+    
+    print(f"[AULAS CREATE] Aula retornada - Status no JSON: '{aula_doc.get('status')}'")
+    
+    return jsonify(aula_doc), 201
 
-@bp.get("/")
+@bp.route("/", methods=["GET"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
 def list_():
     q = request.args.get("q")
     categoria = request.args.get("categoria")
@@ -84,19 +129,44 @@ def list_():
         prof_id = oid(professor)
         if prof_id:
             filt["id_professor"] = prof_id
+            print(f"[AULAS LIST] Buscando aulas do professor: {prof_id} (tipo: {type(prof_id)})")
     if status:
         filt["status"] = status
     
+    print(f"[AULAS LIST] Filtro aplicado: {filt}")
     cur = (mongo.db.aulas.find(filt, {})
            .sort(sort, order)
            .skip((page-1)*limit)
            .limit(limit))
     total = mongo.db.aulas.count_documents(filt)
+    print(f"[AULAS LIST] Total de aulas encontradas: {total}")
     
     # Enriquecer dados com informações do professor e categoria
     aulas = []
     for aula in cur:
-        aula_doc = scrub(aula)
+        # Criar cópia do documento antes do scrub para preservar todos os campos
+        aula_copy = dict(aula)
+        aula_doc = scrub(aula_copy)
+        
+        # Log detalhado para debug
+        status_original = aula.get("status")
+        status_scrub = aula_doc.get("status")
+        print(f"[AULAS LIST] Aula processada - ID: {aula_doc.get('_id')}, Título: {aula_doc.get('titulo')}, Status original: '{status_original}', Status após scrub: '{status_scrub}'")
+        
+        # GARANTIR que o status está presente e correto no resultado
+        if "status" not in aula_doc or not aula_doc.get("status"):
+            # Se não tem status no doc, buscar diretamente do banco
+            aula_doc["status"] = status_original or "disponivel"
+            print(f"[AULAS LIST] ⚠️ Status não estava no doc após scrub, adicionado: '{aula_doc['status']}'")
+        else:
+            # Garantir que o status está correto (pode ter sido alterado pelo scrub)
+            aula_doc["status"] = status_original or aula_doc.get("status") or "disponivel"
+        
+        # Converter ObjectIds para string (id_professor, id_categoria)
+        if aula_doc.get("id_professor"):
+            aula_doc["id_professor"] = str(aula_doc["id_professor"])
+        if aula_doc.get("id_categoria"):
+            aula_doc["id_categoria"] = str(aula_doc["id_categoria"])
         
         # Buscar dados do professor
         if aula.get("id_professor"):
@@ -133,6 +203,12 @@ def get_(id):
         return jsonify({"error": "not_found"}), 404
     
     aula_doc = scrub(doc)
+    
+    # Converter ObjectIds para string (id_professor, id_categoria)
+    if aula_doc.get("id_professor"):
+        aula_doc["id_professor"] = str(aula_doc["id_professor"])
+    if aula_doc.get("id_categoria"):
+        aula_doc["id_categoria"] = str(aula_doc["id_categoria"])
     
     # Enriquecer com dados do professor
     if doc.get("id_professor"):
