@@ -12,6 +12,7 @@ PROF_FIELDS = {
     "bio","historico_academico_profissional",
     "data_nascimento",
     "endereco", "slug", "visibilidade"
+    "area"  
 }
 
 def slugify(nome: str) -> str:
@@ -34,7 +35,9 @@ def ensure_unique_slug(base: str) -> str:
 @bp.post("/")
 def create():
     data = request.get_json(force=True) or {}
+    print("🔍 Dados recebidos:", data)
     body = {k:v for k,v in data.items() if k in PROF_FIELDS}
+    print("🔍 Dados filtrados:", body)
     if not body.get("nome") or not body.get("email"):
         return jsonify({"error":"missing_fields","required":["nome","email"]}), 400
 
@@ -54,7 +57,7 @@ def create():
         nova = body.pop("senha")
         if nova:
             body["senha_hash"] = hash_password(nova)
-
+    
     body["created_at"] = body["updated_at"] = now()
 
     try:
@@ -70,6 +73,7 @@ def list_():
     q = request.args.get("q")
     cidade = request.args.get("cidade")
     estado = request.args.get("estado")
+    area = request.args.get("area")
     page = int(request.args.get("page", 1)); limit = int(request.args.get("limit", 10))
     order = int(request.args.get("order", -1)); sort = request.args.get("sort", "created_at")
 
@@ -83,6 +87,8 @@ def list_():
         ]
     if cidade: filt["endereco.cidade"] = {"$regex": f"^{cidade}$", "$options":"i"}
     if estado: filt["endereco.estado"] = {"$regex": f"^{estado}$", "$options":"i"}
+    if area:
+        filt["area"] = {"$regex": f"^{area}$", "$options":"i"}
 
     cur = (mongo.db.professores.find(filt, {})
            .sort(sort, order)
@@ -250,7 +256,7 @@ def update(id):
             if nova: body["senha_hash"] = bcrypt.hashpw(nova.encode(), bcrypt.gensalt()).decode()
         except Exception:
             pass
-
+            
     if not body: return jsonify({"error":"no_fields_to_update"}), 400
     body["updated_at"] = now()
     r = mongo.db.professores.update_one({"_id": _id}, {"$set": body})
@@ -312,4 +318,3 @@ def get_public_by_slug(slug):
     safe = scrub(doc)
     safe.pop("cpf", None); safe.pop("telefone", None); safe.pop("email", None)
     return jsonify(safe)
-
