@@ -85,11 +85,15 @@ def get_me():
     _id = oid(uid)
     if not _id:
         return jsonify({"error": "invalid_token"}), 401
+    
+    # Verifica se o usuário é do tipo aluno
+    claims = get_jwt() or {}
+    if claims.get("tipo") != "aluno":
+        return jsonify({"error": "forbidden", "msg": "Acesso permitido apenas para alunos"}), 403
 
     doc = mongo.db.alunos.find_one({"_id": _id}, {})
     if not doc:
         # Auto-cria perfil esqueleto a partir do token (se houver claims)
-        claims = get_jwt() or {}
         nome = (claims.get("nome") or "Aluno").strip()
         email = (claims.get("email") or "").strip().lower()
 
@@ -118,6 +122,11 @@ def update_me():
     _id = oid(uid)
     if not _id:
         return jsonify({"error": "invalid_token"}), 401
+    
+    # Verifica se o usuário é do tipo aluno
+    claims = get_jwt() or {}
+    if claims.get("tipo") != "aluno":
+        return jsonify({"error": "forbidden", "msg": "Acesso permitido apenas para alunos"}), 403
 
     data = request.get_json(force=True) or {}
     body = {k: v for k, v in data.items() if k in ALUNO_FIELDS and k != "email"}
@@ -294,15 +303,6 @@ def get_public_by_slug(slug):
     return jsonify(safe)
 
 
-@bp.get("/me")
-@jwt_required()
-def me():
-    """Retorna o aluno logado para checar slug/visibilidade."""
-    _id = oid(get_jwt_identity())
-    if not _id: return jsonify({"error":"invalid_identity"}), 400
-    doc = mongo.db.alunos.find_one({"_id": _id}, {})
-    if not doc: return jsonify({"error":"not_found"}), 404
-    return jsonify(scrub(doc))
 
 
 @bp.post("/me/publish")
@@ -311,6 +311,12 @@ def publish_me():
     """Gera/ajusta slug e marca visibilidade como 'publico'."""
     _id = oid(get_jwt_identity())
     if not _id: return jsonify({"error":"invalid_identity"}), 400
+    
+    # Verifica se o usuário é do tipo aluno
+    claims = get_jwt() or {}
+    if claims.get("tipo") != "aluno":
+        return jsonify({"error": "forbidden", "msg": "Acesso permitido apenas para alunos"}), 403
+    
     d = mongo.db.alunos.find_one({"_id": _id}, {})
     if not d: return jsonify({"error":"not_found"}), 404
 

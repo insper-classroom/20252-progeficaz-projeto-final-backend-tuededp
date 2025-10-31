@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from pymongo.errors import DuplicateKeyError
 from ..extensions import mongo
 from ..utils import oid, now, scrub, hash_password
@@ -73,6 +73,26 @@ def get_(id):
     if not _id: return jsonify({"error":"invalid_id"}), 400
     doc = mongo.db.professores.find_one({"_id": _id}, {})
     if not doc: return jsonify({"error":"not_found"}), 404
+    return jsonify(scrub(doc))
+
+@bp.get("/me")
+@jwt_required()
+def get_me():
+    """Retorna o professor logado."""
+    uid = get_jwt_identity()
+    _id = oid(uid)
+    if not _id:
+        return jsonify({"error": "invalid_token"}), 401
+    
+    # Verifica se o usuário é do tipo professor
+    claims = get_jwt() or {}
+    if claims.get("tipo") != "professor":
+        return jsonify({"error": "forbidden", "msg": "Acesso permitido apenas para professores"}), 403
+    
+    doc = mongo.db.professores.find_one({"_id": _id}, {})
+    if not doc:
+        return jsonify({"error": "not_found"}), 404
+    
     return jsonify(scrub(doc))
 
 @bp.put("/<id>")
