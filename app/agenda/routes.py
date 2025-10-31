@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 from pymongo.errors import DuplicateKeyError
 from ..extensions import mongo
 from ..utils import oid, now, scrub
@@ -8,7 +9,14 @@ bp = Blueprint("agenda", __name__)
 
 AGENDA_FIELDS = {"id_aluno", "id_professor", "id_aula", "data_hora", "status", "observacoes"}
 
-@bp.post("/")
+# Handler OPTIONS explícito para evitar redirects no preflight
+@bp.route("/", methods=["OPTIONS"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def options_handler():
+    return ("", 204)
+
+@bp.route("/", methods=["POST"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
 def create():
     data = request.get_json(force=True) or {}
     body = {k: v for k, v in data.items() if k in AGENDA_FIELDS}
@@ -17,7 +25,7 @@ def create():
     if not all(body.get(field) for field in required_fields):
         return jsonify({"error": "missing_fields", "required": required_fields}), 400
     
-    # Validar se aluno existe
+    # Validar e converter IDs para ObjectId
     aluno_id = oid(body.get("id_aluno"))
     if not aluno_id:
         return jsonify({"error": "invalid_aluno_id"}), 400
@@ -25,6 +33,9 @@ def create():
     aluno = mongo.db.alunos.find_one({"_id": aluno_id})
     if not aluno:
         return jsonify({"error": "aluno_not_found"}), 404
+    
+    # IMPORTANTE: Salvar id_aluno como ObjectId
+    body["id_aluno"] = aluno_id
     
     # Validar se professor existe
     prof_id = oid(body.get("id_professor"))
@@ -35,6 +46,9 @@ def create():
     if not professor:
         return jsonify({"error": "professor_not_found"}), 404
     
+    # IMPORTANTE: Salvar id_professor como ObjectId
+    body["id_professor"] = prof_id
+    
     # Validar se aula existe
     aula_id = oid(body.get("id_aula"))
     if not aula_id:
@@ -43,6 +57,9 @@ def create():
     aula = mongo.db.aulas.find_one({"_id": aula_id})
     if not aula:
         return jsonify({"error": "aula_not_found"}), 404
+    
+    # IMPORTANTE: Salvar id_aula como ObjectId
+    body["id_aula"] = aula_id
     
     # Validar se a aula pertence ao professor
     if aula.get("id_professor") != prof_id:
@@ -85,11 +102,51 @@ def create():
     
     try:
         res = mongo.db.agenda.insert_one(body)
+        print(f"[AGENDA CREATE] Agendamento inserido com ID: {res.inserted_id}")
+        
     except Exception as e:
+        print(f"[AGENDA CREATE] ERRO ao inserir agendamento: {str(e)}")
         return jsonify({"error": "creation_failed", "details": str(e)}), 500
     
+    # IMPORTANTE: Atualizar o status da aula para "agendada" quando um agendamento é criado
+    # Mover para fora do try para garantir que sempre execute
+    try:
+        aula_atual = mongo.db.aulas.find_one({"_id": aula_id})
+        if not aula_atual:
+            print(f"[AGENDA CREATE] ERRO: Aula {aula_id} não encontrada no banco!")
+        else:
+            status_atual = aula_atual.get("status")
+            print(f"[AGENDA CREATE] Aula ID: {aula_id}, Status atual no banco: '{status_atual}'")
+            
+            # Se a aula está "disponivel", mudar para "agendada"
+            if status_atual == "disponivel":
+                resultado = mongo.db.aulas.update_one(
+                    {"_id": aula_id},
+                    {"$set": {"status": "agendada", "updated_at": now()}}
+                )
+                print(f"[AGENDA CREATE] ✅ Aula atualizada para 'agendada': {resultado.modified_count} documento(s) modificado(s)")
+                
+                # Verificar se realmente foi atualizado
+                aula_verificada = mongo.db.aulas.find_one({"_id": aula_id}, {"status": 1})
+                print(f"[AGENDA CREATE] ✅ Verificação pós-update - Status no banco agora: '{aula_verificada.get('status') if aula_verificada else 'N/A'}'")
+            else:
+                print(f"[AGENDA CREATE] ⚠️ Aula não foi atualizada (status atual: '{status_atual}', esperado: 'disponivel')")
+    except Exception as e:
+        print(f"[AGENDA CREATE] ERRO ao atualizar status da aula: {str(e)}")
+        # Não falha o agendamento se não conseguir atualizar o status da aula
+    
     doc = mongo.db.agenda.find_one({"_id": res.inserted_id}, {})
-    return jsonify(scrub(doc)), 201
+    agendamento_doc = scrub(doc)
+    
+    # Converter ObjectIds para string (id_aluno, id_professor, id_aula)
+    if agendamento_doc.get("id_aluno"):
+        agendamento_doc["id_aluno"] = str(agendamento_doc["id_aluno"])
+    if agendamento_doc.get("id_professor"):
+        agendamento_doc["id_professor"] = str(agendamento_doc["id_professor"])
+    if agendamento_doc.get("id_aula"):
+        agendamento_doc["id_aula"] = str(agendamento_doc["id_aula"])
+    
+    return jsonify(agendamento_doc), 201
 
 @bp.get("/")
 def list_():
@@ -157,6 +214,14 @@ def list_():
     for agendamento in cur:
         agendamento_doc = scrub(agendamento)
         
+        # Converter ObjectIds para string (id_aluno, id_professor, id_aula)
+        if agendamento_doc.get("id_aluno"):
+            agendamento_doc["id_aluno"] = str(agendamento_doc["id_aluno"])
+        if agendamento_doc.get("id_professor"):
+            agendamento_doc["id_professor"] = str(agendamento_doc["id_professor"])
+        if agendamento_doc.get("id_aula"):
+            agendamento_doc["id_aula"] = str(agendamento_doc["id_aula"])
+        
         # Buscar dados do aluno
         if agendamento.get("id_aluno"):
             aluno = mongo.db.alunos.find_one({"_id": agendamento["id_aluno"]}, {"nome": 1, "email": 1, "telefone": 1})
@@ -205,6 +270,14 @@ def get_(id):
         return jsonify({"error": "not_found"}), 404
     
     agendamento_doc = scrub(doc)
+    
+    # Converter ObjectIds para string (id_aluno, id_professor, id_aula)
+    if agendamento_doc.get("id_aluno"):
+        agendamento_doc["id_aluno"] = str(agendamento_doc["id_aluno"])
+    if agendamento_doc.get("id_professor"):
+        agendamento_doc["id_professor"] = str(agendamento_doc["id_professor"])
+    if agendamento_doc.get("id_aula"):
+        agendamento_doc["id_aula"] = str(agendamento_doc["id_aula"])
     
     # Enriquecer com dados completos
     if doc.get("id_aluno"):
@@ -281,12 +354,30 @@ def update(id):
     
     body["updated_at"] = now()
     
+    # Converter IDs para ObjectId antes de salvar
+    if body.get("id_aluno"):
+        body["id_aluno"] = oid(body.get("id_aluno"))
+    if body.get("id_professor"):
+        body["id_professor"] = oid(body.get("id_professor"))
+    if body.get("id_aula"):
+        body["id_aula"] = oid(body.get("id_aula"))
+    
     r = mongo.db.agenda.update_one({"_id": _id}, {"$set": body})
     if r.matched_count == 0:
         return jsonify({"error": "not_found"}), 404
     
     doc = mongo.db.agenda.find_one({"_id": _id}, {})
-    return jsonify(scrub(doc))
+    agendamento_doc = scrub(doc)
+    
+    # Converter ObjectIds para string antes de retornar
+    if agendamento_doc.get("id_aluno"):
+        agendamento_doc["id_aluno"] = str(agendamento_doc["id_aluno"])
+    if agendamento_doc.get("id_professor"):
+        agendamento_doc["id_professor"] = str(agendamento_doc["id_professor"])
+    if agendamento_doc.get("id_aula"):
+        agendamento_doc["id_aula"] = str(agendamento_doc["id_aula"])
+    
+    return jsonify(agendamento_doc)
 
 @bp.delete("/<id>")
 def delete(id):
@@ -294,8 +385,32 @@ def delete(id):
     if not _id:
         return jsonify({"error": "invalid_id"}), 400
     
+    # Buscar o agendamento antes de deletar para obter id_aula
+    agendamento = mongo.db.agenda.find_one({"_id": _id})
+    aula_id = agendamento.get("id_aula") if agendamento else None
+    
     r = mongo.db.agenda.delete_one({"_id": _id})
-    return ("", 204) if r.deleted_count else (jsonify({"error": "not_found"}), 404)
+    if r.deleted_count == 0:
+        return jsonify({"error": "not_found"}), 404
+    
+    # IMPORTANTE: Se deletou um agendamento, verificar se há outros agendamentos ativos para a aula
+    if aula_id:
+        agendamentos_ativos = mongo.db.agenda.count_documents({
+            "id_aula": aula_id,
+            "status": {"$in": ["agendada", "confirmada"]}
+        })
+        
+        # Se não há mais agendamentos ativos, voltar a aula para "disponivel"
+        if agendamentos_ativos == 0:
+            aula_atual = mongo.db.aulas.find_one({"_id": aula_id})
+            # Só atualizar se a aula não estiver cancelada ou concluída
+            if aula_atual and aula_atual.get("status") not in ["cancelada", "concluida"]:
+                mongo.db.aulas.update_one(
+                    {"_id": aula_id},
+                    {"$set": {"status": "disponivel", "updated_at": now()}}
+                )
+    
+    return ("", 204)
 
 @bp.put("/<id>/status")
 def update_status(id):
@@ -314,9 +429,65 @@ def update_status(id):
     if novo_status not in status_validos:
         return jsonify({"error": "invalid_status", "valid_statuses": status_validos}), 400
     
+    # Buscar o agendamento atual para obter id_aula
+    agendamento_atual = mongo.db.agenda.find_one({"_id": _id})
+    if not agendamento_atual:
+        return jsonify({"error": "not_found"}), 404
+    
+    aula_id = agendamento_atual.get("id_aula")
+    status_anterior = agendamento_atual.get("status")
+    
+    # Atualizar status do agendamento
     r = mongo.db.agenda.update_one({"_id": _id}, {"$set": {"status": novo_status, "updated_at": now()}})
     if r.matched_count == 0:
         return jsonify({"error": "not_found"}), 404
     
+    # IMPORTANTE: Atualizar status da aula baseado no status do agendamento
+    if aula_id:
+        # Se o agendamento foi cancelado, verificar se há outros agendamentos ativos
+        if novo_status == "cancelada":
+            agendamentos_ativos = mongo.db.agenda.count_documents({
+                "id_aula": aula_id,
+                "status": {"$in": ["agendada", "confirmada"]},
+                "_id": {"$ne": _id}
+            })
+            
+            # Se não há outros agendamentos ativos, voltar a aula para "disponivel"
+            if agendamentos_ativos == 0:
+                mongo.db.aulas.update_one(
+                    {"_id": aula_id},
+                    {"$set": {"status": "disponivel", "updated_at": now()}}
+                )
+        # Se o agendamento foi concluído, verificar se todos os agendamentos estão concluídos
+        elif novo_status == "concluida":
+            total_agendamentos = mongo.db.agenda.count_documents({"id_aula": aula_id})
+            agendamentos_concluidos = mongo.db.agenda.count_documents({
+                "id_aula": aula_id,
+                "status": "concluida"
+            })
+            
+            # Se todos os agendamentos estão concluídos, marcar aula como "concluida"
+            if total_agendamentos > 0 and agendamentos_concluidos == total_agendamentos:
+                mongo.db.aulas.update_one(
+                    {"_id": aula_id},
+                    {"$set": {"status": "concluida", "updated_at": now()}}
+                )
+        # Se o status voltou para "agendada" ou "confirmada" (após cancelamento), atualizar aula
+        elif novo_status in ["agendada", "confirmada"] and status_anterior == "cancelada":
+            mongo.db.aulas.update_one(
+                {"_id": aula_id},
+                {"$set": {"status": "agendada", "updated_at": now()}}
+            )
+    
     doc = mongo.db.agenda.find_one({"_id": _id}, {})
-    return jsonify(scrub(doc))
+    agendamento_doc = scrub(doc)
+    
+    # Converter ObjectIds para string antes de retornar
+    if agendamento_doc.get("id_aluno"):
+        agendamento_doc["id_aluno"] = str(agendamento_doc["id_aluno"])
+    if agendamento_doc.get("id_professor"):
+        agendamento_doc["id_professor"] = str(agendamento_doc["id_professor"])
+    if agendamento_doc.get("id_aula"):
+        agendamento_doc["id_aula"] = str(agendamento_doc["id_aula"])
+    
+    return jsonify(agendamento_doc)

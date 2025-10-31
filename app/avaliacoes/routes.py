@@ -82,7 +82,17 @@ def create():
         return jsonify({"error": "creation_failed", "details": str(e)}), 500
     
     doc = mongo.db.avaliacoes.find_one({"_id": res.inserted_id}, {})
-    return jsonify(scrub(doc)), 201
+    avaliacao_doc = scrub(doc)
+    
+    # Converter ObjectIds para string (id_aluno, id_prof, id_aula)
+    if avaliacao_doc.get("id_aluno"):
+        avaliacao_doc["id_aluno"] = str(avaliacao_doc["id_aluno"])
+    if avaliacao_doc.get("id_prof"):
+        avaliacao_doc["id_prof"] = str(avaliacao_doc["id_prof"])
+    if avaliacao_doc.get("id_aula"):
+        avaliacao_doc["id_aula"] = str(avaliacao_doc["id_aula"])
+    
+    return jsonify(avaliacao_doc), 201
 
 @bp.get("/")
 def list_():
@@ -139,6 +149,14 @@ def list_():
     for avaliacao in cur:
         avaliacao_doc = scrub(avaliacao)
         
+        # Converter ObjectIds para string (id_aluno, id_prof, id_aula)
+        if avaliacao_doc.get("id_aluno"):
+            avaliacao_doc["id_aluno"] = str(avaliacao_doc["id_aluno"])
+        if avaliacao_doc.get("id_prof"):
+            avaliacao_doc["id_prof"] = str(avaliacao_doc["id_prof"])
+        if avaliacao_doc.get("id_aula"):
+            avaliacao_doc["id_aula"] = str(avaliacao_doc["id_aula"])
+        
         # Buscar dados do aluno
         if avaliacao.get("id_aluno"):
             aluno = mongo.db.alunos.find_one({"_id": avaliacao["id_aluno"]}, {"nome": 1, "email": 1})
@@ -184,6 +202,14 @@ def get_(id):
         return jsonify({"error": "not_found"}), 404
     
     avaliacao_doc = scrub(doc)
+    
+    # Converter ObjectIds para string (id_aluno, id_prof, id_aula)
+    if avaliacao_doc.get("id_aluno"):
+        avaliacao_doc["id_aluno"] = str(avaliacao_doc["id_aluno"])
+    if avaliacao_doc.get("id_prof"):
+        avaliacao_doc["id_prof"] = str(avaliacao_doc["id_prof"])
+    if avaliacao_doc.get("id_aula"):
+        avaliacao_doc["id_aula"] = str(avaliacao_doc["id_aula"])
     
     # Enriquecer com dados completos
     if doc.get("id_aluno"):
@@ -232,7 +258,17 @@ def update(id):
         return jsonify({"error": "not_found"}), 404
     
     doc = mongo.db.avaliacoes.find_one({"_id": _id}, {})
-    return jsonify(scrub(doc))
+    avaliacao_doc = scrub(doc)
+    
+    # Converter ObjectIds para string (id_aluno, id_prof, id_aula)
+    if avaliacao_doc.get("id_aluno"):
+        avaliacao_doc["id_aluno"] = str(avaliacao_doc["id_aluno"])
+    if avaliacao_doc.get("id_prof"):
+        avaliacao_doc["id_prof"] = str(avaliacao_doc["id_prof"])
+    if avaliacao_doc.get("id_aula"):
+        avaliacao_doc["id_aula"] = str(avaliacao_doc["id_aula"])
+    
+    return jsonify(avaliacao_doc)
 
 @bp.delete("/<id>")
 def delete(id):
