@@ -53,35 +53,57 @@ def _parse_since_iso(s: str):
         return None
 
 def find_user_any(_id):
+    """Procura o usuário em alunos/professores/usuarios e retorna doc + 'tipo' coerente."""
     if not _id:
         return None
-    proj = {"nome": 1, "email": 1, "bio": 1, "tipo": 1}
-    return (
-        mongo.db.get_collection("usuarios").find_one({"_id": _id}, proj)
-        or mongo.db.alunos.find_one({"_id": _id}, proj)
-        or mongo.db.professores.find_one({"_id": _id}, proj)
-    )
+    proj = {"nome": 1, "email": 1, "bio": 1, "headline": 1, "avatar_url": 1, "tipo": 1}
+
+    # prioriza coleções específicas (delas sabemos o tipo com certeza)
+    a = mongo.db.alunos.find_one({"_id": _id}, proj)
+    if a:
+        a["tipo"] = "aluno"
+        return a
+
+    p = mongo.db.professores.find_one({"_id": _id}, proj)
+    if p:
+        p["tipo"] = "prof"
+        return p
+
+    # fallback genérico (se existir 'usuarios', mantém 'tipo' se houver)
+    u = mongo.db.get_collection("usuarios").find_one({"_id": _id}, proj)
+    if u:
+        # se não tiver tipo, deixa None mesmo
+        return u
+
+    return None
 
 def user_public(doc):
+    """Normaliza shape público do usuário (inclui avatar_url e headline)."""
     if not doc:
         return None
     return {
         "id": str(doc["_id"]),
         "nome": doc.get("nome"),
         "email": doc.get("email"),
-        "bio": doc.get("bio"),
-        "tipo": doc.get("tipo"),  # "prof" | "aluno"
+        # exibe bio; se não houver, cai pra headline
+        "bio": doc.get("bio") or doc.get("headline"),
+        "headline": doc.get("headline"),
+        "avatar_url": doc.get("avatar_url"),
+        "tipo": doc.get("tipo"),  # "prof" | "aluno" | None
     }
-
+    
 def conversation_payload(conv, me_id):
+    """Monta o payload da conversa já com 'other' enriquecido."""
     members = conv["members"]
-    # membros foram salvos como ObjectId ou string — toleramos ambos
+    # membros podem ser ObjectId ou string
     m0, m1 = members
     other_id = m0 if str(m1) == str(me_id) else m1
+
+    # aceita ObjectId ou string:
     other_oid = oid(other_id) or other_id
     other_doc = find_user_any(other_oid)
 
-    # Completa/recupera last_message se estiver ausente
+    # Completa/recupera last_message se estiver ausente ou sem 'at'
     lm = conv.get("last_message") or None
     if not lm or not lm.get("at"):
         last_msg = mongo.db.messages.find_one(
@@ -100,12 +122,12 @@ def conversation_payload(conv, me_id):
     return {
         "id": str(conv["_id"]),
         "members": [str(m) for m in members],
-        "other": user_public(other_doc),
+        "other": user_public(other_doc),  # <- agora vem avatar_url/headline/bio/tipo
         "last_message": lm,
         "created_at": iso_z(conv.get("created_at")),
         "updated_at": iso_z(conv.get("updated_at")),
     }
-
+    
 def get_me_oid():
     ident = get_jwt_identity()
     if isinstance(ident, str):
