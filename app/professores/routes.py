@@ -17,9 +17,7 @@ PROF_FIELDS = {
 @bp.post("/")
 def create():
     data = request.get_json(force=True) or {}
-    print("🔍 Dados recebidos:", data)
     body = {k:v for k,v in data.items() if k in PROF_FIELDS}
-    print("🔍 Dados filtrados:", body)
     if not body.get("nome") or not body.get("email"):
         return jsonify({"error":"missing_fields","required":["nome","email"]}), 400
 
