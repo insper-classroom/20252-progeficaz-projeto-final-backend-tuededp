@@ -51,7 +51,6 @@ def ensure_unique_slug(base: str) -> str:
     base = base or "perfil"
     slug = base
     i = 2
-    # conta documents para evitar condição de corrida simples
     while mongo.db.professores.count_documents({"slug": slug}, limit=1):
         slug = f"{base}-{i}"
         i += 1
