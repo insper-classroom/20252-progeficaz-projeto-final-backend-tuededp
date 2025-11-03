@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from pymongo.errors import DuplicateKeyError
 import re
@@ -316,3 +317,98 @@ def get_public_by_slug(slug):
     safe = scrub(doc)
     safe.pop("cpf", None); safe.pop("telefone", None); safe.pop("email", None)
     return jsonify(safe)
+
+# ----------- Professores em alta (melhores avaliações) -----------
+@bp.route("/destaque", methods=["OPTIONS"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def destaque_options():
+    return ("", 204)
+
+@bp.route("/destaque", methods=["GET"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def get_em_alta():
+    """Retorna professores com melhores avaliações (em alta)."""
+    try:
+        limit = int(request.args.get("limit", 6))
+        
+        # Verificar se há avaliações no banco
+        total_avaliacoes = mongo.db.avaliacoes.count_documents({})
+        print(f"[PROFESSORES DESTAQUE] Total de avaliações no banco: {total_avaliacoes}")
+        
+        if total_avaliacoes == 0:
+            # Se não há avaliações, retornar professores aleatórios ou vazio
+            return jsonify({"data": [], "total": 0}), 200
+        
+        # Pipeline de agregação para calcular nota média por professor
+        # Primeiro, filtrar apenas avaliações com id_prof válido
+        pipeline = [
+            {
+                "$match": {
+                    "id_prof": {"$exists": True, "$ne": None}  # Só avaliações com id_prof válido
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$id_prof",
+                    "nota_media": {"$avg": "$nota"},
+                    "total_avaliacoes": {"$sum": 1}
+                }
+            },
+            {
+                "$match": {
+                    "total_avaliacoes": {"$gte": 1},  # Pelo menos 1 avaliação
+                    "nota_media": {"$gte": 4.0}  # Nota média mínima de 4.0
+                }
+            },
+            {
+                "$sort": {"nota_media": -1, "total_avaliacoes": -1}  # Ordena por nota média e quantidade
+            },
+            {
+                "$limit": limit
+            }
+        ]
+        
+        try:
+            avaliacoes_agregadas = list(mongo.db.avaliacoes.aggregate(pipeline))
+            print(f"[PROFESSORES DESTAQUE] Avaliações agregadas: {len(avaliacoes_agregadas)}")
+        except Exception as agg_error:
+            print(f"[PROFESSORES DESTAQUE] Erro na agregação: {str(agg_error)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": "aggregation_error", "details": str(agg_error)}), 500
+        
+        # Buscar dados dos professores
+        professores_em_alta = []
+        for item in avaliacoes_agregadas:
+            prof_id = item.get("_id")
+            if not prof_id:
+                print(f"[PROFESSORES DESTAQUE] Item sem _id: {item}")
+                continue
+            
+            # Converter para ObjectId se necessário
+            try:
+                from bson import ObjectId
+                if isinstance(prof_id, str):
+                    prof_id = ObjectId(prof_id)
+                elif not isinstance(prof_id, ObjectId):
+                    print(f"[PROFESSORES DESTAQUE] ID inválido: {prof_id}, tipo: {type(prof_id)}")
+                    continue
+            except Exception as oid_error:
+                print(f"[PROFESSORES DESTAQUE] Erro ao converter ObjectId: {str(oid_error)}")
+                continue
+            
+            prof = mongo.db.professores.find_one({"_id": prof_id}, {"senha_hash": 0, "cpf": 0, "telefone": 0})
+            
+            if prof and prof.get("visibilidade") != "privado":
+                prof_doc = scrub(prof)
+                prof_doc["nota_media"] = round(item["nota_media"], 1)
+                prof_doc["total_avaliacoes"] = item["total_avaliacoes"]
+                professores_em_alta.append(prof_doc)
+        
+        print(f"[PROFESSORES DESTAQUE] Professores em alta encontrados: {len(professores_em_alta)}")
+        return jsonify({"data": professores_em_alta, "total": len(professores_em_alta)}), 200
+    except Exception as e:
+        print(f"[PROFESSORES DESTAQUE] ERRO: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "stats_error", "details": str(e)}), 500
