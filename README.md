@@ -8,6 +8,8 @@
 
 > Backend do **Estudaí**, plataforma que conecta **veteranos (monitores / alunos-destaque)** com **alunos universitários** para aulas particulares acessíveis.  
 > API REST construída com **Flask**, **MongoDB** e **arquitetura modular**, aplicando boas práticas de engenharia de software e metodologias ágeis.
+> > Parte do **Projeto 3 — Programação Eficaz - Insper - Segundo Período**.
+
 
 ---
 
