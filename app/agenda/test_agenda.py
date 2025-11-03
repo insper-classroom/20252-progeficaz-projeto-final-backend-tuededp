@@ -236,6 +236,9 @@ def test_update_status_success(mock_mongo, client):
     mock_result = MagicMock()
     mock_result.matched_count = 1
     mock_mongo.db.agenda.update_one.return_value = mock_result
+
+    # total_agendamentos e agendamentos_concluidos
+    mock_mongo.db.agenda.count_documents.side_effect = [1, 1]
     
     # Mock final
     mock_mongo.db.agenda.find_one.return_value = {
