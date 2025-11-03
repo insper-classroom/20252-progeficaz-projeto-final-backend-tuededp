@@ -9,6 +9,8 @@ from flask_jwt_extended import create_access_token
 def app():
     app = create_app()
     app.config['TESTING'] = True
+    # Garante que scrub remova senha_hash durante testes
+    app.config['SHOW_HASH'] = False
     return app
 
 @pytest.fixture
