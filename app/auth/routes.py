@@ -28,6 +28,38 @@ def test_db():
     except Exception as e:
         return jsonify({"msg": f"Erro no banco: {str(e)}"}), 500
 
+@bp.route("/stats", methods=["OPTIONS"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def stats_options():
+    return ("", 204)
+
+@bp.route("/stats", methods=["GET"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def get_stats():
+    """Retorna estatísticas gerais da plataforma."""
+    try:
+        # Verificar qual banco está sendo usado
+        db_name = mongo.db.name
+        print(f"[STATS] Usando banco de dados: {db_name}")
+        
+        total_alunos = mongo.db.alunos.count_documents({})
+        total_professores = mongo.db.professores.count_documents({})
+        # Contar apenas aulas disponíveis ou agendadas (não canceladas ou concluídas)
+        total_aulas = mongo.db.aulas.count_documents({
+            "status": {"$in": ["disponivel", "agendada", "em andamento"]}
+        })
+        
+        print(f"[STATS] Alunos: {total_alunos}, Professores: {total_professores}, Aulas: {total_aulas}")
+        
+        return jsonify({
+            "total_alunos": total_alunos,
+            "total_professores": total_professores,
+            "total_aulas": total_aulas
+        }), 200
+    except Exception as e:
+        print(f"[STATS] ERRO: {str(e)}")
+        return jsonify({"error": "stats_error", "details": str(e)}), 500
+
 # ---- PRE-FLIGHT (CORS) ----
 @bp.route("/login", methods=["OPTIONS"], strict_slashes=False)
 @cross_origin(headers=["Content-Type", "Authorization"])
