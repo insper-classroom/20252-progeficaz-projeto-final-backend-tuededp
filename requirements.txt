@@ -23,3 +23,7 @@ flask-cors==6.0.1
 flask-jwt-extended==4.6.0
 requests==2.31.0
 mongomock==4.3.0
+google-auth==2.42.1
+google-auth-oauthlib==1.2.3
+google-api-python-client==2.186.0
+
