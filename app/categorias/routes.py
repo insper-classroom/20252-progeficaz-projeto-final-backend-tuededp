@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 from pymongo.errors import DuplicateKeyError
 from ..extensions import mongo
 from ..utils import oid, now, scrub
@@ -7,7 +8,14 @@ bp = Blueprint("categorias", __name__)
 
 CATEGORIA_FIELDS = {"nome"}
 
+# Handler OPTIONS explícito para evitar redirects no preflight
+@bp.route("/", methods=["OPTIONS"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
+def options_handler():
+    return ("", 204)
+
 @bp.post("/")
+@cross_origin(headers=["Content-Type", "Authorization"])
 def create():
     data = request.get_json(force=True) or {}
     body = {k: v for k, v in data.items() if k in CATEGORIA_FIELDS}
@@ -31,7 +39,8 @@ def create():
     doc = mongo.db.categorias.find_one({"_id": res.inserted_id}, {})
     return jsonify(scrub(doc)), 201
 
-@bp.get("/")
+@bp.route("/", methods=["GET"], strict_slashes=False)
+@cross_origin(headers=["Content-Type", "Authorization"])
 def list_():
     q = request.args.get("q")
     page = int(request.args.get("page", 1))
