@@ -22,6 +22,8 @@ def auth_header():
 @patch('app.alunos.routes.mongo')
 def test_create_success(mock_mongo, client):
     oid = ObjectId()
+    
+    mock_mongo.db.alunos.count_documents.return_value = 0
     mock_mongo.db.alunos.insert_one.return_value = MagicMock(inserted_id=oid)
     mock_mongo.db.alunos.find_one.return_value = {"_id": oid, "nome": "Ana", "email": "ana@example.com"}
 

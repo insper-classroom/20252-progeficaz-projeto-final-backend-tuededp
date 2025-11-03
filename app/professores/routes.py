@@ -8,11 +8,11 @@ from ..utils import oid, now, scrub, hash_password
 bp = Blueprint("professores", __name__)
 
 PROF_FIELDS = {
-    "nome","telefone","cpf","email","senha","saldo",
-    "bio","historico_academico_profissional",
+    "nome", "telefone", "cpf", "email", "senha", "saldo",
+    "bio", "historico_academico_profissional",
     "data_nascimento",
-    "endereco", "slug", "visibilidade"
-    "area"  
+    "endereco", "slug", "visibilidade",
+    "area",
 }
 
 def slugify(nome: str) -> str:
@@ -24,13 +24,17 @@ def slugify(nome: str) -> str:
     return s or "perfil"
 
 def ensure_unique_slug(base: str) -> str:
+    # Gera um slug único. 
     base = base or "perfil"
     slug = base
     i = 2
-    while mongo.db.professores.count_documents({"slug": slug}, limit=1):
+    while True:
+        found = mongo.db.professores.find_one({"slug": slug}, {"_id": 1})
+        # Se não retornou um documento real (dict), assume que está livre
+        if not isinstance(found, dict) or not found:
+            return slug
         slug = f"{base}-{i}"
         i += 1
-    return slug
 
 @bp.post("/")
 def create():
