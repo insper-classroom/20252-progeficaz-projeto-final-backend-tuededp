@@ -1,27 +1,53 @@
-# 🧠 Estudaí — Backend
+# 🧠 Estudaí — Backend (Flask API)
 
-[![Status](https://img.shields.io/badge/status-development-orange)]()
-[![Python](https://img.shields.io/badge/python-3.12+-blue)]()
-[![License](https://img.shields.io/badge/license-academic-lightgrey)]()
+[![Status](https://img.shields.io/badge/status-development-orange?style=for-the-badge)]()
+[![Python](https://img.shields.io/badge/python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)]()
+[![Flask](https://img.shields.io/badge/Flask-2.3.0-black?style=for-the-badge&logo=flask&logoColor=white)]()
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-4DB33D?style=for-the-badge&logo=mongodb&logoColor=white)]()
+[![License](https://img.shields.io/badge/License-Academic-lightgrey?style=for-the-badge)]()
 
-> Backend do **Estudaí**, plataforma que conecta veteranos (monitores / alunos-destaque) com alunos universitários para aulas particulares acessíveis.  
-> API REST construída em **Flask** e **MongoDB**.
+> Backend do **Estudaí**, plataforma que conecta **veteranos (monitores / alunos-destaque)** com **alunos universitários** para aulas particulares acessíveis.  
+> API REST construída com **Flask**, **MongoDB** e **arquitetura modular**, aplicando boas práticas de engenharia de software e metodologias ágeis.
 
 ---
 
 ## 📘 Sobre o Projeto
-O backend fornece rotas REST para **gerenciar usuários (alunos e professores)**, realizando operações CRUD completas, com suporte a busca, paginação e filtros dinâmicos.  
-Também serve como base para o futuro **agente inteligente**, responsável por interpretar descrições de matérias e sugerir professores correspondentes.
+
+O backend é responsável por toda a **lógica de negócio e persistência de dados** do Estudaí.  
+Oferece rotas **RESTful** para **cadastro, autenticação e gerenciamento de usuários, aulas, categorias, avaliações e agenda**, além da integração com serviços externos como o **ViaCEP**.
+
+O sistema também prevê a implementação de um **agente inteligente**, que futuramente recomendará professores com base em descrições textuais e preferências dos alunos.
+
+---
+
+## 🎯 Objetivos
+
+### 🎓 Objetivo Geral
+Desenvolver uma **API segura e escalável** para intermediar a comunicação entre frontend React e banco de dados MongoDB.
+
+### 🧩 Objetivos Específicos
+- Implementar CRUD completo para alunos e professores.  
+- Desenvolver rotas de agenda, aulas e avaliações.  
+- Garantir autenticação segura com JWT e bcrypt.  
+- Fornecer endpoints para busca, filtros e estatísticas.  
+- Integrar com API externa ViaCEP.  
+- Aplicar metodologia ágil (Kanban) no desenvolvimento colaborativo.
 
 ---
 
 ## ⚙️ Tecnologias Utilizadas
-- 🐍 **Python 3.12+**
-- 🔥 **Flask**
-- 🍃 **MongoDB**
-- 🔐 **bcrypt** — hash seguro de senhas
-- 🌐 **Flask-CORS** — integração com frontend React
-- 📦 **PyMongo** — driver de conexão com MongoDB
+
+| Categoria | Tecnologias |
+|------------|-------------|
+| **Linguagem** | Python 3.12+ |
+| **Framework** | Flask |
+| **Banco de Dados** | MongoDB Atlas |
+| **ORM / Driver** | PyMongo |
+| **Segurança** | bcrypt, JWT |
+| **Integração** | Flask-CORS |
+| **Ambiente** | dotenv |
+| **Testes** | Insomnia / Postman |
+| **Versionamento** | Git e GitHub |
 
 ---
 
@@ -29,17 +55,76 @@ Também serve como base para o futuro **agente inteligente**, responsável por i
 
 ```bash
 app/
-├── alunos/                   # Rotas e lógica dos alunos
-│   └── __init__.py
-├── professores/              # Rotas e lógica dos professores
-│   └── __init__.py
-├── extensions.py             # Configuração Mongo e CORS
-├── utils.py                  # Funções auxiliares (hash, datas, scrub)
-└── __init__.py               # Inicialização Flask App
-app.py                        # Ponto de entrada principal
-requirements.txt              # Dependências do projeto
-.env                          # Variáveis de ambiente
-README.md                     # Documentação
+│
+├── __pycache__/                # Cache interno do Python
+│
+├── agenda/                     # Módulo de rotas e lógica da agenda
+│   ├── __init__.py
+│   └── routes.py
+│
+├── alunos/                     # Módulo de rotas e lógica dos alunos
+│   ├── __init__.py
+│   └── routes.py
+│
+├── aulas/                      # Módulo de rotas e lógica das aulas
+│   ├── __init__.py
+│   └── routes.py
+│
+├── auth/                       # Módulo de autenticação e login
+│   ├── __init__.py
+│   └── routes.py
+│
+├── avaliacoes/                 # Módulo de avaliações e notas
+│   ├── __init__.py
+│   └── routes.py
+│
+├── categorias/                 # Módulo de categorias de aulas
+│   ├── __init__.py
+│   └── routes.py
+│
+├── chats/                      # Módulo de chat entre aluno e professor
+│   ├── __init__.py
+│   └── routes.py
+│
+├── professores/                # Módulo de rotas e lógica dos professores
+│   ├── __init__.py
+│   └── routes.py
+│
+├── uploads/                    # Armazenamento de arquivos enviados
+│   ├── __init__.py
+│   └── handlers.py
+│
+├── __init__.py                 # Inicialização do app Flask
+├── extensions.py               # Configurações (MongoDB, JWT, CORS)
+├── utils.py                    # Funções utilitárias (hash, validação, sanitização)
+│
+venv/                           # Ambiente virtual Python
+│
+.gitignore                      # Arquivos e pastas ignorados pelo Git
+.env                            # Variáveis de ambiente (não versionado)
+app.py                          # Ponto de entrada principal do servidor Flask
+AULAS.md                        # Documentação específica de aulas
+README.md                       # Documentação geral do backend
+requirements.txt                # Dependências do projeto
+test.ps1                        # Script PowerShell para testes locais
+
+```
+## 📄 Acesso ao documento do projeto
+https://docs.google.com/document/d/1C1V_qLk0f_oySNz3rmSsapQO2a3BLTWCD8VKug_Kxy8/edit?usp=sharing
+
+## 👨‍💻 Equipe de Desenvolvimento
+
+| Nome |
+|------|
+| Gabriel Rosa | 
+| João Pedro Vivaqua |
+| João Pedro Murbach |
+| Lucas Bressanin |
+| Murilo Godoy |
+| Vinicius Oehlmann |
+| Victor Pimenta |
+
+
 
 
 
