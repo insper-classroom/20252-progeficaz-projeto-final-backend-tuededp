@@ -49,17 +49,13 @@ def slugify(nome: str) -> str:
 
 
 def ensure_unique_slug(base: str) -> str:
-    # Gera um slug único. 
     base = base or "perfil"
     slug = base
     i = 2
-    while True:
-        found = mongo.db.professores.find_one({"slug": slug}, {"_id": 1})
-        # Se não retornou um documento real (dict), assume que está livre
-        if not isinstance(found, dict) or not found:
-            return slug
+    while mongo.db.professores.count_documents({"slug": slug}, limit=1):
         slug = f"{base}-{i}"
         i += 1
+    return slug
 
 
 def normalize_list_maybe(value):
@@ -93,9 +89,22 @@ def maybe_number(v):
 
 @bp.post("/")
 def create():
+    """
+    Cria um novo professor. Aceita os campos do formulário de cadastro:
+    nome, email, senha, telefone, cpf, area, data_nascimento,
+    historico_academico_profissional (mapeado para bio), endereco, headline, links, etc.
+    """
     data = request.get_json(force=True) or {}
+
+    # construímos body apenas com campos permitidos
+    # também aceitamos 'historico_academico_profissional' vindo do front
     body = {k: v for k, v in data.items() if k in PROF_FIELDS}
 
+    # map de campo enviado 'historico_academico_profissional' -> bio (se enviado)
+    if "historico_academico_profissional" in data and not body.get("bio"):
+        body["bio"] = data.get("historico_academico_profissional")
+
+    # validações mínimas
     if not body.get("nome") or not data.get("email"):
         return jsonify({"error": "missing_fields", "required": ["nome", "email"]}), 400
 
@@ -116,7 +125,13 @@ def create():
         else:
             body.pop("valor_hora", None)
 
-    # slug
+    # links — se vier como string vazia, remova
+    if "links" in body and isinstance(body.get("links"), dict):
+        # limpa chaves vazias
+        links = {k: v for k, v in (body.get("links") or {}).items() if v}
+        body["links"] = links or {}
+
+    # slug: se não vier, gera a partir do nome; se vier, normaliza e garante unicidade
     if not body.get("slug"):
         base = slugify(body.get("nome"))
         body["slug"] = ensure_unique_slug(base)
@@ -124,6 +139,7 @@ def create():
         base = slugify(body["slug"])
         body["slug"] = ensure_unique_slug(base)
 
+    # senha -> senha_hash
     senha = body.pop("senha", None)
     if senha:
         body["senha_hash"] = hash_password(senha)
@@ -133,8 +149,7 @@ def create():
     try:
         res = mongo.db.professores.insert_one(body)
     except DuplicateKeyError:
-        # tenta proteger email duplicado
-        if mongo.db.professores.count_documents({"email": body["email"]}, limit=1):
+        if mongo.db.professores.count_documents({"email": body.get("email")}, limit=1):
             return jsonify({"error": "email_already_exists"}), 409
         return jsonify({"error": "duplicate_key"}), 409
 
@@ -256,6 +271,10 @@ def update_me():
 
     data = request.get_json(force=True) or {}
     body = {k: v for k, v in data.items() if k in PROF_FIELDS and k not in {"email", "saldo"}}
+
+    # permite envio de 'historico_academico_profissional' vindo do front
+    if "historico_academico_profissional" in data and not body.get("bio"):
+        body["bio"] = data.get("historico_academico_profissional")
 
     # normaliza listas (inclui idiomas)
     for f in ("especializacoes", "quer_ensinar", "skills", "modalidades", "idiomas"):
@@ -380,7 +399,7 @@ def delete(id):
     return ("", 204) if r.deleted_count else (jsonify({"error": "not_found"}), 404)
 
 
-# ----------- Perfil público por slug (sem JWT) -----------
+# ----------- Perfil público por slug (sem JWT) ----------- 
 @bp.route("/slug/<slug>", methods=["GET"])
 @bp.route("/slug/<slug>/", methods=["GET"])   # aceita a barra final também
 def get_public_by_slug(slug):
