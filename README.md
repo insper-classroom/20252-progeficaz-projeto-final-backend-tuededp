@@ -126,9 +126,8 @@ https://docs.google.com/document/d/1C1V_qLk0f_oySNz3rmSsapQO2a3BLTWCD8VKug_Kxy8/
 | Vinicius Oehlmann |
 | Victor Pimenta |
 
-## 📄 Acesso ao documento do projeto
-http://54.196.232.66/8000/api
-
+## 📄 API do Backend (nossa url comeca com api, entao colocamos a url para ver alunos como exemplo)
+http://54.196.232.66/api/alunos/
 
 
 
