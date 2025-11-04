@@ -8,6 +8,9 @@ from ..utils import oid, now, scrub
 from datetime import datetime, timezone
 from app.google_calendar import get_oauth_flow, build_credentials_from_tokens, create_calendar_event
 from flask import current_app
+import json
+from urllib.parse import quote_plus, unquote_plus
+
 
 bp = Blueprint("agenda", __name__)
 
@@ -531,12 +534,7 @@ def update_status(id):
     
     return jsonify(agendamento_doc)
 # no topo do arquivo (se ainda não tiver)
-import json
-from urllib.parse import quote_plus, unquote_plus
-import os
-from flask import current_app
 
-# Rota para iniciar autorização
 @bp.route("/google/oauth/start", methods=["GET"])
 def google_oauth_start():
     professor_id = request.args.get("professor_id")
@@ -558,6 +556,14 @@ def google_oauth_start():
 # Callback que o Google chama depois da autorização
 @bp.route("/google/oauth/callback", methods=["GET"])
 def google_oauth_callback():
+    """
+    Callback do Google OAuth.
+    - Recebe `code` e `state`.
+    - Salva tokens no documento do professor.
+    - Se houver `agenda_id` no state, cria um evento no Google Calendar (com Google Meet)
+      e grava calendar_event_id, calendar_htmlLink e meet_link no documento do agendamento.
+    - Redireciona para AFTER_GOOGLE_OAUTH_REDIRECT (front).
+    """
     code = request.args.get("code")
     state = request.args.get("state")
     if not code:
@@ -584,6 +590,7 @@ def google_oauth_callback():
     # Salvar tokens no professor — converte professor_id de string para ObjectId
     professor_id = state_data.get("professor_id")
     agenda_id = state_data.get("agenda_id")
+
     if not professor_id:
         current_app.logger.warning("google_oauth_callback: professor_id ausente ou inválido no state")
     else:
@@ -593,12 +600,98 @@ def google_oauth_callback():
                 "access_token": credentials.token,
                 "refresh_token": credentials.refresh_token,
                 "scopes": credentials.scopes,
+                # você pode salvar expiry se quiser: credentials.expiry
             }
             mongo.db.professores.update_one({"_id": prof_oid}, {"$set": {"google_tokens": token_doc}})
             current_app.logger.info(f"Tokens salvos para professor {professor_id}")
         except Exception:
             current_app.logger.exception("Erro ao salvar google_tokens no professor")
 
-    # (mantém sua lógica de criar evento se agenda_id existir) ...
-    # ... (se tudo ok) redireciona para frontend
+    # Se houver agenda pendente, cria o evento agora (usando as credenciais obtidas)
+    if agenda_id:
+        try:
+            # Recupera o agendamento do banco (agenda) — usar ObjectId
+            try:
+                ag_oid = oid(agenda_id)
+            except Exception:
+                ag_oid = None
+
+            if ag_oid:
+                ag = mongo.db.agenda.find_one({"_id": ag_oid})
+            else:
+                ag = None
+
+            if not ag:
+                current_app.logger.warning(f"[GOOGLE OAUTH CALLBACK] agendamento {agenda_id} não encontrado")
+            else:
+                # Constrói credenciais utilizáveis pela Google API a partir dos tokens
+                token_doc = {
+                    "access_token": credentials.token,
+                    "refresh_token": credentials.refresh_token,
+                    "scopes": credentials.scopes,
+                }
+                creds = build_credentials_from_tokens(token_doc)
+
+                # Montar start/end datetimes
+                # Aqui assumimos que ag["data_hora"] está armazenado em ISO string ou datetime compatível
+                from datetime import datetime, timedelta
+                start_dt = None
+                if isinstance(ag.get("data_hora"), str):
+                    start_dt = datetime.fromisoformat(ag["data_hora"].replace('Z', '+00:00'))
+                else:
+                    start_dt = ag.get("data_hora")
+                # se quiser duração fixa (ex: 1h)
+                end_dt = start_dt + timedelta(hours=1)
+
+                # Montar attendees com e-mails (se existirem)
+                attendees = []
+                prof = mongo.db.professores.find_one({"_id": ag.get("id_professor")})
+                aluno = mongo.db.alunos.find_one({"_id": ag.get("id_aluno")})
+                if prof and prof.get("email"):
+                    attendees.append({"email": prof["email"]})
+                if aluno and aluno.get("email"):
+                    attendees.append({"email": aluno["email"]})
+
+                # Criar o evento chamando sua função utilitária
+                # **IMPORTANTE**: create_calendar_event precisa inserir com conferenceDataVersion=1
+                event = create_calendar_event(
+                    creds,
+                    summary=f"Aula: {str(ag.get('id_aula'))}",
+                    description=ag.get("observacoes", ""),
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    attendees=attendees,
+                    timezone=os.environ.get("GOOGLE_CALENDAR_DEFAULT_TIMEZONE", "America/Sao_Paulo")
+                )
+
+                # Extrair link do Google Meet, se criado
+                meet_link = None
+                conf = event.get("conferenceData")
+                if conf:
+                    entry_points = conf.get("entryPoints", []) or []
+                    for ep in entry_points:
+                        # entryPointType "video" costuma ser Meet; checamos uri
+                        if ep.get("entryPointType") and ep.get("uri"):
+                            meet_link = ep.get("uri")
+                            break
+
+                # Salvar informações no agendamento
+                mongo.db.agenda.update_one(
+                    {"_id": ag_oid},
+                    {
+                        "$set": {
+                            "calendar_event_id": event.get("id"),
+                            "calendar_htmlLink": event.get("htmlLink"),
+                            "meet_link": meet_link,
+                            "calendar_status": "created",
+                            "updated_at": now()
+                        }
+                    }
+                )
+                current_app.logger.info(f"[GOOGLE OAUTH CALLBACK] Evento criado e salvo no agendamento {agenda_id}")
+        except Exception:
+            current_app.logger.exception("Erro ao criar evento após OAuth")
+            # não falha totalmente — apenas loga
+
+    # Após callback você pode redirecionar professor para a UI
     return redirect(os.environ.get("AFTER_GOOGLE_OAUTH_REDIRECT", "/"))

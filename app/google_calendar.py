@@ -41,21 +41,66 @@ def build_credentials_from_tokens(token_data):
     )
     return creds
 
-def create_calendar_event(credentials, calendar_id="primary", summary=None, description=None, start_dt=None, end_dt=None, attendees=None, timezone="America/Sao_Paulo"):
+def create_calendar_event(credentials: Credentials, summary: str, description: str,
+                          start_dt, end_dt, attendees=None, timezone="America/Sao_Paulo"):
     """
-    credentials: google.oauth2.credentials.Credentials
-    start_dt, end_dt: datetime objects with tzinfo
-    attendees: list of dicts [{"email": "..."}]
+    credentials: google oauth2 Credentials (com acesso calendar.events)
+    start_dt, end_dt: datetime com timezone (p.ex. aware datetimes)
+    attendees: list de dicts como [{"email":"x@y.com"}, ...]
     """
     service = build("calendar", "v3", credentials=credentials)
+    
     event_body = {
-        "summary": summary or "Aula agendada",
+        "summary": summary,
         "description": description or "",
-        "start": {"dateTime": start_dt.isoformat(), "timeZone": timezone},
-        "end": {"dateTime": end_dt.isoformat(), "timeZone": timezone},
+        "start": {
+            "dateTime": start_dt.isoformat(),
+            "timeZone": timezone
+        },
+        "end": {
+            "dateTime": end_dt.isoformat(),
+            "timeZone": timezone
+        },
+        "attendees": attendees or [],
+        # pedir pro Google criar um Google Meet
+        "conferenceData": {
+            "createRequest": {
+                "requestId": f"meet-{start_dt.timestamp()}",  # id único (qualquer string única)
+                "conferenceSolutionKey": {"type": "hangoutsMeet"}
+            }
+        },
+        # opcional: reminders
+        "reminders": {
+            "useDefault": False,
+            "overrides": [
+                {"method": "popup", "minutes": 30},
+                {"method": "email", "minutes": 60*24}
+            ]
+        }
     }
-    if attendees:
-        event_body["attendees"] = attendees
 
-    event = service.events().insert(calendarId=calendar_id, body=event_body, sendUpdates="all").execute()
-    return event  # event contains 'id' and 'htmlLink'
+    # IMPORTANTE: passar conferenceDataVersion=1 para que o meet seja criado
+    event = service.events().insert(calendarId="primary",
+                                    body=event_body,
+                                    conferenceDataVersion=1,
+                                    sendUpdates="all"  # "all" para enviar convites por email
+                                   ).execute()
+    # event terá campos: id, htmlLink, conferenceData (com entryPoints / meet link), etc.
+    meet_link = None
+    conf = event.get("conferenceData")
+    if conf:
+        for ep in conf.get("entryPoints", []):
+            if ep.get("entryPointType") == "video":  # normalmente 'video'
+                meet_link = ep.get("uri")
+                break
+
+    # Agora o event tem:
+    # - event["id"]              → ID do evento no Calendar
+    # - event["htmlLink"]        → link do evento no calendário
+    # - meet_link                → link do Meet
+
+    return {
+        "id": event.get("id"),
+        "htmlLink": event.get("htmlLink"),
+        "meet_link": meet_link
+    }
