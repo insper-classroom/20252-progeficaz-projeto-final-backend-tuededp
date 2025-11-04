@@ -23,7 +23,10 @@ def auth_header():
 def test_create_success(mock_mongo, client):
     oid = ObjectId()
     
-    mock_mongo.db.professores.find_one.side_effect = [None,{"_id": oid, "nome": "Ana", "email": "ana@example.com"},]
+    # ensure_unique_slug usa count_documents - retorna 0 (slug livre)
+    mock_mongo.db.professores.count_documents.return_value = 0
+    # find_one é chamado apenas no final para buscar o doc inserido
+    mock_mongo.db.professores.find_one.return_value = {"_id": oid, "nome": "Ana", "email": "ana@example.com"}
     mock_mongo.db.professores.insert_one.return_value = MagicMock(inserted_id=oid)
 
     professor = {"nome": "Ana", "email": "ana@example.com", "senha": "123"}
@@ -91,14 +94,18 @@ def test_get_professor_nao_encontrado_404(mock_mongo, client, auth_header):
 def test_update_success(mock_mongo, client, auth_header):
     oid = ObjectId()
     mock_mongo.db.professores.update_one.return_value = MagicMock(matched_count=1)
+    
+    # ensure_unique_slug usa count_documents - retorna 0 (slug livre)
+    mock_mongo.db.professores.count_documents.return_value = 0
+    
     # find_one chamadas na ordem:
     # 1) doc_atual (para decidir slug): retorna nome atual sem slug
     # 2) exists (slug em uso por outro?): None -> livre
     # 3) fetch final do documento atualizado
     mock_mongo.db.professores.find_one.side_effect = [
-        {"_id": oid, "nome": "Nome Atualizado", "slug": None},
-        None,
-        {"_id": oid, "nome": "Nome Atualizado", "email": "joao@example.com"},
+        {"_id": oid, "nome": "Nome Atualizado", "slug": None},  # doc_atual
+        None,  # exists check
+        {"_id": oid, "nome": "Nome Atualizado", "email": "joao@example.com"},  # fetch final
     ]
 
     response = client.put(f"/api/professores/{oid}", json={"nome": "Nome Atualizado"}, headers=auth_header)
